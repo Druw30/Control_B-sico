@@ -1,0 +1,71 @@
+const int numReadings = 10;              // Número de lecturas para promediar (ajusta si es necesario)
+int readings[numReadings];               // Array para almacenar lecturas
+int readIndex = 0;                       // Índice de la lectura actual
+int total = 0;                           // Suma de las lecturas
+int average = 0;                         // Media de las lecturas
+
+const float pulsosPorRevolucion = 20.0;  // 20 pulsos equivalen a 1 revolución
+unsigned long tiempoAnterior = 0;
+int pulsos = 0;                          // Número de pulsos detectados en 50 ms
+volatile int pulsosContados = 0;         // Contador de pulsos que se incrementa en la interrupción
+
+void setup() {
+  Serial.begin(115200);  // Iniciar comunicación serie
+
+  // Inicializar todas las lecturas a 0
+  for (int i = 0; i < numReadings; i++) {
+    readings[i] = 0;
+  }
+
+  // Configura el pin del encoder y la interrupción
+  attachInterrupt(digitalPinToInterrupt(15), encoderISR, RISING);  // Ajusta el pin según tu configuración
+
+  tiempoAnterior = millis();
+}
+
+void loop() {
+  unsigned long tiempoActual = millis();
+
+  // Si ha pasado más de 50 ms
+  if (tiempoActual - tiempoAnterior >= 50) {
+    // Leer el número de pulsos desde la última vez
+    noInterrupts();             // Desactiva interrupciones temporalmente
+    pulsos = pulsosContados;    // Copiar el valor de pulsos
+    pulsosContados = 0;         // Reiniciar el contador
+    interrupts();               // Activar interrupciones
+
+    // Calcular el RPS (Revoluciones por segundo)
+    float rps = (pulsos / pulsosPorRevolucion) / 0.05;  // 50 ms es 0.05 segundos
+
+    // Aplicar filtro de media móvil
+    total = total - readings[readIndex];  // Restar la lectura más antigua del total
+    readings[readIndex] = rps;            // Guardar la nueva lectura de RPS
+    total = total + readings[readIndex];  // Sumar la nueva lectura al total
+    readIndex = (readIndex + 1) % numReadings;  // Mover el índice al siguiente
+    average = total / numReadings;        // Calcular la media suavizada
+
+    // Mostrar los pulsos contabilizados y la RPS suavizada para graficar
+    // Usamos "\t" (tabulador) como delimitador para la gráfica de dos variables
+    // El plotter serial graficará en la misma línea
+    Serial.print("Pulsos:");
+    Serial.print(pulsos);         // Imprime los pulsos contabilizados
+    Serial.print(",");           // Tabulador para separar los valores
+    Serial.print("RPS:");
+    Serial.println(average);      // Imprime el RPS suavizado (nueva línea)
+
+    // Imprimir los valores por separado en el Monitor Serie
+   /* Serial.print("Pulsos contabilizados en 50 ms: ");
+    Serial.println(pulsos);       // Mostrar el valor de pulsos por separado
+    
+    Serial.print("RPS suavizado: ");
+    Serial.println(average);      // Mostrar el valor de RPS por separado*/
+
+    // Reiniciar el tiempo para la siguiente lectura
+    tiempoAnterior = tiempoActual;
+  }
+}
+
+// Función de interrupción para contar pulsos del encoder
+void encoderISR() {
+  pulsosContados++;
+}
